@@ -599,8 +599,23 @@ function App() {
       <main className="flex flex-1 overflow-hidden">
         {/* Code Editor Section */}
         <div className="flex w-1/3 flex-col border-r border-gray-700 bg-gray-900">
-          <div className="bg-gray-800 px-4 py-2 text-sm font-semibold text-gray-300">
-            Cコードエディタ
+          <div className="flex justify-between items-center">
+            <span>Cコードエディタ</span>
+            <label className="cursor-pointer bg-blue-600 hover:bg-blue-500 text-xs px-2 py-1 rounded text-white">
+              ファイル読込 (.c)
+              <input
+                type="file"
+                className="hidden"
+                accept=".c,.txt"
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = (evt) => setCode(evt.target.result);
+                  reader.readAsText(file);
+                }}
+              />
+            </label>
           </div>
           <textarea
             className="flex-1 resize-none bg-[#1e1e1e] p-4 font-mono text-sm text-gray-200 outline-none focus:ring-2 focus:ring-blue-500"
@@ -639,8 +654,8 @@ function App() {
             Loading Sensors...
           </div>
         </div>
-      </main>
-    </div>
+      </main >
+    </div >
   )
 }
 
