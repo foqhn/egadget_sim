@@ -18,17 +18,25 @@ export const readSensorValue = (ctx, x, y) => {
     // We allow a small tolerance in case of anti-aliasing or slight rendering diffs
     // Target: #C0C0C0 -> 192
     if (Math.abs(r - 192) < 10 && Math.abs(g - 192) < 10 && Math.abs(b - 192) < 10) {
-        // Silver detected! Return 80% of max (1023 * 0.8 approx 818)
+        // Silver detected! Return 80% of max 1023 (approx 818)
+        // User requirement: Black(10) << White(700) < Silver(818)
         return 818;
     }
 
     // Grayscale: (R+G+B)/3
-    // White(255) -> 0, Black(0) -> 1023
     const avg = (r + g + b) / 3;
 
-    // Invert: 255 becomes 0, 0 becomes 255. Then map to 0-1023.
-    // 255 * 4 = 1020 approx 1023.
-    return Math.floor((255 - avg) * 4);
+    // Standard Sensor Logic often depends on the circuit (Pull-up vs Pull-down).
+    // User reported "Inverted" behavior with current logic (Black=1023, White=0).
+    // Switching to Reflectance Model:
+    // White (High Reflection) -> High Value (~1023)
+    // Black (Low Reflection) -> Low Value (~0)
+
+    // Scale 0-255 to 10-700
+    // Linear interpolation: y = y1 + (x - x1) * (y2 - y1) / (x2 - x1)
+    // x=avg, x1=0, y1=10, x2=255, y2=700
+    // y = 10 + avg * (690 / 255)
+    return Math.floor(10 + avg * (690 / 255));
 };
 
 /**

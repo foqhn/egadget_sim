@@ -12,15 +12,20 @@ function App() {
   const [code, setCode] = useState(
     `void user_main(void)
     {
+      int black = 60;
+      int white = 600; // Approx near max 700
+      int silver = 818; // 80% of 1023
       while (TRUE) {
-        if (gAD[CN2] < 512) {
-          motor(40, 40);
-        } else if (gAD[CN5] < 512) {
-          motor(10, 40);
-        } else if (gAD[CN6] < 512) {
-          motor(40, 10);
-        } else {
-          motor(30, -30);
+        if (gAD[CN2] < black) {
+          if (gAD[CN5] > white) {
+            if (gAD[CN6] > white) {
+              motor(40, 40);
+            } else {
+              motor(40, -40);
+            }
+          } else {
+            motor(-40, 40);
+          }
         }
       }
     }`);
@@ -71,6 +76,36 @@ function App() {
     rotate: false // For robot rotation
   });
 
+  const statusRef = useRef(null);
+
+  // Helper to read sensors (extracted to be usable in drawScene too)
+  const updateSensors = (ctx) => {
+    ROBOT_CONFIG.sensors.forEach(sensor => {
+      const pos = calculateSensorPosition(robotRef.current, sensor);
+      const val = readSensorValue(ctx, pos.x, pos.y);
+      sharedGADRef.current[sensor.id] = val;
+    });
+  };
+
+  const updateStatus = () => {
+    if (!statusRef.current) return;
+    const gAD = sharedGADRef.current;
+    const { leftSpeed, rightSpeed, x, y, angle } = robotRef.current;
+
+    statusRef.current.innerHTML = `
+        <div class="grid grid-cols-4 gap-4 text-xs md:text-sm font-mono leading-tight">
+            <div><span class="text-gray-500">L_SENSOR(CN5):</span> <span class="text-green-400 font-bold">${gAD[5]}</span></div>
+            <div><span class="text-gray-500">C_SENSOR(CN2):</span> <span class="text-green-400 font-bold">${gAD[2]}</span></div>
+            <div><span class="text-gray-500">R_SENSOR(CN6):</span> <span class="text-green-400 font-bold">${gAD[6]}</span></div>
+            <div><span class="text-gray-500">ANGLE:</span> <span class="text-purple-400">${(angle * 180 / Math.PI).toFixed(1)}°</span></div>
+            
+            <div><span class="text-gray-500">L_MOTOR:</span> <span class="text-blue-400 font-bold">${Math.round(leftSpeed)}</span></div>
+            <div><span class="text-gray-500">R_MOTOR:</span> <span class="text-blue-400 font-bold">${Math.round(rightSpeed)}</span></div>
+            <div class="col-span-2"><span class="text-gray-500">POS:</span> <span class="text-purple-400">(${Math.round(x)}, ${Math.round(y)})</span></div>
+        </div>
+      `;
+  };
+
   // Helper to draw everything (Course + Robot)
   const drawScene = () => {
     const canvas = canvasRef.current;
@@ -88,6 +123,10 @@ function App() {
 
     // Draw Robot (always on top)
     drawRobot(ctx, robotRef.current);
+
+    // Update Sensors & Status UI (So user sees values while dragging)
+    updateSensors(ctx);
+    updateStatus();
   };
 
   // Simulation Loop
@@ -100,13 +139,12 @@ function App() {
     drawCourse(ctx, canvas.width, canvas.height, courseObjects);
 
     // 2. Read Sensors (Update sharedGADRef)
-    ROBOT_CONFIG.sensors.forEach(sensor => {
-      const pos = calculateSensorPosition(robotRef.current, sensor);
-      const val = readSensorValue(ctx, pos.x, pos.y);
-      sharedGADRef.current[sensor.id] = val;
-    });
+    updateSensors(ctx);
 
-    // 3. Run User Code (Generator Step)
+    // 3. Status Update
+    updateStatus();
+
+    // 4. Run User Code (Generator Step)
     if (generatorRef.current) {
       try {
         if (waitStateRef.current.isWaiting) {
@@ -133,13 +171,13 @@ function App() {
       }
     }
 
-    // 4. Physics Update
+    // 5. Physics Update
     robotRef.current = updateRobotPhysics(robotRef.current);
 
-    // 5. Draw Robot
+    // 6. Draw Robot
     drawRobot(ctx, robotRef.current);
 
-    // 6. Loop
+    // 7. Loop
     if (isRunning) {
       requestRef.current = requestAnimationFrame(animate);
     }
@@ -335,8 +373,8 @@ function App() {
 
         // Define the motor function for the generator
         const motorFunc = (l, r) => {
-          robotRef.current.leftSpeed = l;
-          robotRef.current.rightSpeed = r;
+          robotRef.current.leftSpeed = r; // Swap: 1st Arg (l) -> Right Motor (Standard e-Gadget?) 
+          robotRef.current.rightSpeed = l; // Swap: 2nd Arg (r) -> Left Motor
         };
 
         // Create the generator function by invoking the factory with dependencies
@@ -378,6 +416,18 @@ function App() {
   // Run when stopped/init
 
 
+  const resetRobot = () => {
+    setIsRunning(false);
+    robotRef.current = {
+      ...startPositionRef.current,
+      leftSpeed: 0,
+      rightSpeed: 0
+    };
+    waitStateRef.current = { isWaiting: false, endTime: 0 };
+    // Force draw
+    setTimeout(drawScene, 0);
+  };
+
   return (
     <div className="flex h-screen w-screen flex-col bg-gray-900 text-white">
       <header className="flex items-center justify-between bg-gray-800 p-4 shadow-md">
@@ -401,6 +451,12 @@ function App() {
         </div>
 
         <div className="flex gap-4">
+          <button
+            className="rounded px-4 py-2 font-bold text-white bg-yellow-600 hover:bg-yellow-700"
+            onClick={resetRobot}
+          >
+            Reset
+          </button>
           <button
             className={`rounded px-4 py-2 font-bold text-white transition ${isRunning ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}
             onClick={() => setIsRunning(!isRunning)}
@@ -440,6 +496,14 @@ function App() {
             onMouseLeave={handleMouseUp}
             onContextMenu={(e) => e.preventDefault()}
           />
+
+          {/* Sensor Console */}
+          <div
+            ref={statusRef}
+            className="mt-4 w-[800px] h-20 bg-gray-900 border border-gray-700 rounded-lg shadow-inner p-3 overflow-hidden text-gray-300"
+          >
+            Loading Sensors...
+          </div>
         </div>
       </main>
     </div>

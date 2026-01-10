@@ -35,6 +35,12 @@ export const transpileCode = (sourceCode) => {
         if (endIndex === -1) throw new Error("Unbalanced braces in user_main");
         let body = cleanCode.substring(startIndex, endIndex);
 
+        // 2.5 Convert C variable declarations to JavaScript
+        // Handle 'const int' -> 'const'
+        body = body.replace(/\bconst\s+(?:unsigned\s+)?(?:int|float|double|long|short|char|bool)\b/g, "const");
+        // Handle 'int', 'float', etc. -> 'let'
+        body = body.replace(/\b(?:unsigned\s+)?(?:int|float|double|long|short|char|bool)\b/g, "let");
+
         // 3. Transform 'while(TRUE)' -> 'while(true)' with yield
         // Wrap yield in parens to ensure object literal is parsed correctly
         body = body.replace(/while\s*\(\s*TRUE\s*\)\s*\{/g, "while(true) { yield ({type: 'tick'});");
