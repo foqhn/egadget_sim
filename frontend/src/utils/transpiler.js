@@ -52,7 +52,18 @@ export const transpileCode = (sourceCode) => {
         // console.log("Transpiled Body:", body);
 
         // 5. Wrap in a generator function
+        // We define VAR_A to VAR_J as constants 0 to 9 for gV access
         const generatorCode = `
+        const VAR_A = 0;
+        const VAR_B = 1;
+        const VAR_C = 2;
+        const VAR_D = 3;
+        const VAR_E = 4;
+        const VAR_F = 5;
+        const VAR_G = 6;
+        const VAR_H = 7;
+        const VAR_I = 8;
+        const VAR_J = 9;
         return function* () {
           ${body}
         };
@@ -61,7 +72,8 @@ export const transpileCode = (sourceCode) => {
         // console.log("Generated Generator Code:", generatorCode); // Debug)
 
         try {
-            const generatorFactory = new Function('gAD', 'motor', 'CN2', 'CN5', 'CN6', 'TRUE', generatorCode);
+            // Add 'gV' to the arguments
+            const generatorFactory = new Function('gAD', 'gV', 'motor', 'CN2', 'CN5', 'CN6', 'TRUE', generatorCode);
             return generatorFactory;
         } catch (syntaxError) {
             console.error("Syntax Error in Generated Code:", syntaxError);

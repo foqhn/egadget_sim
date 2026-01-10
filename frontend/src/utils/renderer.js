@@ -10,13 +10,13 @@ export const drawCourse = (ctx, width, height, objects) => {
     objects.forEach(obj => {
         ctx.beginPath();
         if (obj.type === 'ellipse') {
-            ctx.lineWidth = obj.strokeWidth || 40;
+            ctx.lineWidth = obj.strokeWidth || 10;
             ctx.lineCap = 'round';
             ctx.strokeStyle = obj.color || 'black';
             ctx.ellipse(obj.cx, obj.cy, obj.rx, obj.ry, 0, 0, 2 * Math.PI);
             ctx.stroke();
         } else if (obj.type === 'rect') {
-            ctx.lineWidth = obj.strokeWidth || 40;
+            ctx.lineWidth = obj.strokeWidth || 10;
             ctx.lineJoin = 'round';
             ctx.strokeStyle = obj.color || 'black';
             ctx.rect(obj.x, obj.y, obj.w, obj.h);
@@ -33,7 +33,7 @@ export const drawSelection = (ctx, obj) => {
     // Let's reproduce simple bbox logic here
     let x, y, w, h;
     if (obj.type === 'ellipse') {
-        const sw = obj.strokeWidth || 40;
+        const sw = obj.strokeWidth || 10;
         x = obj.cx - obj.rx - sw / 2;
         y = obj.cy - obj.ry - sw / 2;
         w = (obj.rx * 2) + sw;

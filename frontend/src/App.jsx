@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import './App.css'
-import { ROBOT_CONFIG } from './config/robotConfig';
+import { ROBOT_CONFIG, COURSE_CONFIG } from './config/robotConfig';
 import { transpileCode } from './utils/transpiler';
 import { updateRobotPhysics } from './utils/physics';
 import { drawCourse, drawRobot, drawSelection } from './utils/renderer';
@@ -56,10 +56,42 @@ function App() {
 
   // --- Course Editor State ---
   const [courseObjects, setCourseObjects] = useState([
-    { id: 'default_oval', type: 'ellipse', cx: 400, cy: 300, rx: 300, ry: 200, strokeWidth: 40, color: 'black' }
+    { id: 'default_oval', type: 'ellipse', cx: 400, cy: 300, rx: 300, ry: 200, strokeWidth: COURSE_CONFIG.strokeWidth, color: 'black' }
   ]);
   const [selectedId, setSelectedId] = useState(null);
   const [mode, setMode] = useState('sim'); // 'sim' | 'edit'
+  const [showCourseMenu, setShowCourseMenu] = useState(false);
+
+  const loadPredefinedCourse = (courseName) => {
+    if (courseName === 'default_oval') {
+      setCourseObjects([
+        { id: 'default_oval', type: 'ellipse', cx: 400, cy: 300, rx: 300, ry: 200, strokeWidth: COURSE_CONFIG.strokeWidth, color: 'black' }
+      ]);
+    } else if (courseName === 'hyoutan') {
+      const img = new Image();
+      img.src = '/courses/hyoutan.png';
+      // Preload to get dimensions
+      img.onload = () => {
+        let w = img.width;
+        let h = img.height;
+        // Scale fit to 800x600 if larger (keeping aspect ratio)
+        if (w > 800 || h > 600) {
+          const scale = Math.min(800 / w, 600 / h) * 0.95;
+          w *= scale;
+          h *= scale;
+        }
+        setCourseObjects([
+          { id: 'hyoutan', type: 'image', x: (800 - w) / 2, y: (600 - h) / 2, w, h, imgElement: img }
+        ]);
+        // Wait for render
+        setTimeout(drawScene, 50);
+      };
+    }
+    setShowCourseMenu(false);
+    // Ensure we switch to Sim mode or stay in current?
+    // Maybe user wants to edit the loaded course, so keep current mode.
+    setTimeout(drawScene, 0);
+  };
 
   // Image Upload Ref
   const fileInputRef = useRef(null);
@@ -78,11 +110,18 @@ function App() {
 
   const statusRef = useRef(null);
 
+  // Zoom State
+  const [zoom, setZoom] = useState(1.0);
+
   // Helper to read sensors (extracted to be usable in drawScene too)
   const updateSensors = (ctx) => {
     ROBOT_CONFIG.sensors.forEach(sensor => {
       const pos = calculateSensorPosition(robotRef.current, sensor);
-      const val = readSensorValue(ctx, pos.x, pos.y);
+      // Map World (pos) to Screen/Canvas Pixels for reading color
+      const screenX = pos.x * zoom;
+      const screenY = pos.y * zoom;
+
+      const val = readSensorValue(ctx, screenX, screenY);
       sharedGADRef.current[sensor.id] = val;
     });
   };
@@ -112,20 +151,35 @@ function App() {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
 
-    // Draw objects
-    drawCourse(ctx, canvas.width, canvas.height, courseObjects);
+    // Clear whole canvas (Screen Coords)
+    ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform to clear
+    ctx.fillStyle = '#f3f4f6';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Draw Editor Overlay (if in Edit Mode and selected)
+    ctx.save();
+    ctx.scale(zoom, zoom);
+
+    // Draw objects (World Coords)
+    drawCourse(ctx, canvas.width / zoom, canvas.height / zoom, courseObjects);
+
+    // Draw Editor Overlay
     if (mode === 'edit' && selectedId) {
       const obj = courseObjects.find(o => o.id === selectedId);
       if (obj) drawSelection(ctx, obj);
     }
 
-    // Draw Robot (always on top)
+    // Check Sensors BEFORE drawing robot
+    updateSensors(ctx);
+
+    // Draw Robot (World Coords)
     drawRobot(ctx, robotRef.current);
 
-    // Update Sensors & Status UI (So user sees values while dragging)
-    updateSensors(ctx);
+    // Check Sensors (Need screen coords, handled in updateSensors but passed ctx is usually transformed? 
+    // NO, updateSensors uses getImageData which IGNORES transform. So we are good if we pass calculated Screen Coordinates.)
+
+    ctx.restore();
+
+
     updateStatus();
   };
 
@@ -135,16 +189,32 @@ function App() {
     if (!canvas) return;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-    // 1. Draw Course & Background
-    drawCourse(ctx, canvas.width, canvas.height, courseObjects);
+    // 1. Draw Scene (includes scaling)
+    // Clear & Scale
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#f3f4f6';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // 2. Read Sensors (Update sharedGADRef)
+    ctx.save();
+    ctx.scale(zoom, zoom);
+
+    drawCourse(ctx, canvas.width / zoom, canvas.height / zoom, courseObjects); // Helper needs World Size? Actually drawCourse just iterates objects. Width/Height arg is only for full-screen clearing which we did above.
+
+    // 4. Physics Update (World Coords)
+    robotRef.current = updateRobotPhysics(robotRef.current);
+
+    // 2. Read Sensors (Use Screen Coords, BEFORE robot draw)
     updateSensors(ctx);
 
-    // 3. Status Update
+    // 5. Draw Robot
+    drawRobot(ctx, robotRef.current);
+
+    ctx.restore();
+
+    // 3. Status
     updateStatus();
 
-    // 4. Run User Code (Generator Step)
+    // 6. Run User Code
     if (generatorRef.current) {
       try {
         if (waitStateRef.current.isWaiting) {
@@ -171,12 +241,6 @@ function App() {
       }
     }
 
-    // 5. Physics Update
-    robotRef.current = updateRobotPhysics(robotRef.current);
-
-    // 6. Draw Robot
-    drawRobot(ctx, robotRef.current);
-
     // 7. Loop
     if (isRunning) {
       requestRef.current = requestAnimationFrame(animate);
@@ -186,11 +250,18 @@ function App() {
   // Mouse Event Handlers
   const getMousePos = (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
     return {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top
+      x: sx / zoom, // Convert Screen -> World
+      y: sy / zoom
     };
   };
+
+  // Zoom Actions
+  // Zoom Actions
+  const handleZoomIn = () => setZoom(z => Math.min(z * 1.1, 5.0));
+  const handleZoomOut = () => setZoom(z => Math.max(z / 1.1, 0.2));
 
   const handleMouseDown = (e) => {
     if (isRunning) return; // Disable editing while running
@@ -302,7 +373,7 @@ function App() {
     const id = Date.now().toString();
     const color = isSilver === true ? '#C0C0C0' : 'black';
     setCourseObjects([...courseObjects, {
-      id, type: 'rect', x: 200, y: 200, w: 200, h: 100, strokeWidth: 40, color: color
+      id, type: 'rect', x: 200, y: 200, w: 200, h: 100, strokeWidth: COURSE_CONFIG.strokeWidth, color: color
     }]);
     setSelectedId(id);
     setMode('edit');
@@ -313,7 +384,7 @@ function App() {
   const addEllipse = () => {
     const id = Date.now().toString();
     setCourseObjects([...courseObjects, {
-      id, type: 'ellipse', cx: 400, cy: 300, rx: 100, ry: 50, strokeWidth: 40, color: 'black'
+      id, type: 'ellipse', cx: 400, cy: 300, rx: 100, ry: 50, strokeWidth: COURSE_CONFIG.strokeWidth, color: 'black'
     }]);
     setSelectedId(id);
     setMode('edit');
@@ -341,7 +412,7 @@ function App() {
         // Scale down if huge
         let w = img.width;
         let h = img.height;
-        if (w > 400) { let scale = 400 / w; w *= scale; h *= scale; }
+        if (w > 600) { let scale = 600 / w; w *= scale; h *= scale; }
 
         setCourseObjects([...courseObjects, {
           id, type: 'image', x: 200, y: 200, w, h, imgElement: img
@@ -361,15 +432,13 @@ function App() {
       // Transpile code using utility
       const factory = transpileCode(code);
       if (factory) {
-        // Reset to User-Defined Start Position
-        robotRef.current = {
-          ...startPositionRef.current, // Use the position set by mouse
-          leftSpeed: 0,
-          rightSpeed: 0
-        };
+        // Initialize execution state (Keep current position)
+        robotRef.current.leftSpeed = 0;
+        robotRef.current.rightSpeed = 0;
 
         waitStateRef.current = { isWaiting: false, endTime: 0 };
         sharedGADRef.current = new Array(10).fill(0); // Reset shared GAD
+        const sharedGVRef = new Array(10).fill(0); // gV array for user variables
 
         // Define the motor function for the generator
         const motorFunc = (l, r) => {
@@ -381,6 +450,7 @@ function App() {
         // The factory returns a function that, when called, returns the generator iterator.
         const getGeneratorIterator = factory(
           sharedGADRef.current, // Pass the persistent gAD array
+          sharedGVRef, // Pass gV array
           motorFunc,
           2, 5, 6, true // Hardcoded CN constants and TRUE for now
         );
@@ -428,26 +498,86 @@ function App() {
     setTimeout(drawScene, 0);
   };
 
+  // Canvas Autosize Logic
+  const containerRef = useRef(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const resizeObserver = new ResizeObserver(entries => {
+      for (let entry of entries) {
+        const { width, height } = entry.contentRect;
+        // Subtract some padding/margin if needed, currently filling container minus some buffer
+        // Also account for sensor console height if it's separate, but here it is overlay or below.
+        // Let's maximize available space, keeping sensor console in mind. 
+        // User said "simulator window", implying the gray area.
+        // We will make canvas fit the container minus console height approx.
+        setCanvasSize({ width: Math.floor(width - 32), height: Math.floor(height - 120) });
+      }
+    });
+
+    resizeObserver.observe(containerRef.current);
+    return () => resizeObserver.disconnect();
+  }, []);
+
+  // Re-draw when canvas size or zoom changes
+  useEffect(() => {
+    requestAnimationFrame(drawScene);
+  }, [canvasSize, zoom, courseObjects, selectedId, mode]);
+
+
   return (
     <div className="flex h-screen w-screen flex-col bg-gray-900 text-white">
       <header className="flex items-center justify-between bg-gray-800 p-4 shadow-md">
-        <h1 className="text-xl font-bold text-blue-400">Robot Simulator</h1>
+        <h1 className="text-xl font-bold text-blue-400">e-gadgetシミュレータ v1.0</h1>
 
-        {/* Editor Toolbar */}
-        <div className="flex gap-2 bg-gray-700 p-1 rounded">
-          <button onClick={() => setMode('sim')} className={`px-3 py-1 rounded ${mode === 'sim' ? 'bg-blue-600' : 'bg-gray-600 hover:bg-gray-500'}`}>Sim Mode</button>
-          <button onClick={() => setMode('edit')} className={`px-3 py-1 rounded ${mode === 'edit' ? 'bg-blue-600' : 'bg-gray-600 hover:bg-gray-500'}`}>Edit Mode</button>
+        <div className="flex gap-2 bg-gray-700 p-1 rounded relative">
+          <button onClick={() => setMode('sim')} className={`px-3 py-1 rounded ${mode === 'sim' ? 'bg-blue-600' : 'bg-gray-600 hover:bg-gray-500'}`}>シミュレーション</button>
+          <button onClick={() => setMode('edit')} className={`px-3 py-1 rounded ${mode === 'edit' ? 'bg-blue-600' : 'bg-gray-600 hover:bg-gray-500'}`}>コース編集</button>
+
+          {/* Course Menu */}
+          <div className="relative">
+            <button
+              onClick={() => setShowCourseMenu(!showCourseMenu)}
+              className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded flex items-center gap-1"
+            >
+              コース ▼
+            </button>
+            {showCourseMenu && (
+              <div className="absolute top-full left-0 mt-2 w-48 bg-gray-800 border border-gray-600 rounded shadow-xl z-50 flex flex-col">
+                <button
+                  className="px-4 py-2 text-left hover:bg-gray-700 border-b border-gray-700"
+                  onClick={() => loadPredefinedCourse('default_oval')}
+                >
+                  楕円コース
+                </button>
+                <button
+                  className="px-4 py-2 text-left hover:bg-gray-700"
+                  onClick={() => loadPredefinedCourse('hyoutan')}
+                >
+                  ひょうたんコース (Gourd)
+                </button>
+              </div>
+            )}
+          </div>
+
           {mode === 'edit' && <>
             <div className="w-px bg-gray-500 mx-2"></div>
-            <button onClick={addRect} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded">Box</button>
-            <button onClick={() => addRect(true)} className="px-3 py-1 bg-gray-400 hover:bg-gray-300 text-black rounded" title="Silver Tape (Value ~818)">Silver</button>
-            <button onClick={addEllipse} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded">Oval</button>
+            <button onClick={addRect} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded">四角</button>
+            <button onClick={() => addRect(true)} className="px-3 py-1 bg-gray-400 hover:bg-gray-300 text-black rounded" title="Silver Tape (Value ~560)">銀色を配置</button>
+            <button onClick={addEllipse} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded">楕円</button>
             <label className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded cursor-pointer">
-              Img
+              画像
               <input type="file" className="hidden" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" />
             </label>
-            <button onClick={deleteSelected} className="px-3 py-1 bg-red-600 hover:bg-red-500 rounded">Del</button>
+            <button onClick={deleteSelected} className="px-3 py-1 bg-red-600 hover:bg-red-500 rounded">削除</button>
           </>}
+
+          <div className="w-px bg-gray-500 mx-2"></div>
+          <button onClick={handleZoomOut} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded font-bold" title="Zoom Out">-</button>
+          <span className="text-sm self-center text-gray-300 min-w-[3rem] text-center">{Math.round(zoom * 100)}%</span>
+          <button onClick={handleZoomIn} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded font-bold" title="Zoom In">+</button>
         </div>
 
         <div className="flex gap-4">
@@ -455,13 +585,13 @@ function App() {
             className="rounded px-4 py-2 font-bold text-white bg-yellow-600 hover:bg-yellow-700"
             onClick={resetRobot}
           >
-            Reset
+            リセット
           </button>
           <button
             className={`rounded px-4 py-2 font-bold text-white transition ${isRunning ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}
             onClick={() => setIsRunning(!isRunning)}
           >
-            {isRunning ? 'Stop' : 'Run'}
+            {isRunning ? '停止' : '実行'}
           </button>
         </div>
       </header>
@@ -470,7 +600,7 @@ function App() {
         {/* Code Editor Section */}
         <div className="flex w-1/3 flex-col border-r border-gray-700 bg-gray-900">
           <div className="bg-gray-800 px-4 py-2 text-sm font-semibold text-gray-300">
-            C-like Code Editor
+            Cコードエディタ
           </div>
           <textarea
             className="flex-1 resize-none bg-[#1e1e1e] p-4 font-mono text-sm text-gray-200 outline-none focus:ring-2 focus:ring-blue-500"
@@ -481,15 +611,18 @@ function App() {
         </div>
 
         {/* Simulator Section */}
-        <div className="flex flex-1 flex-col items-center justify-center bg-gray-100 p-4 relative select-none">
+        <div
+          ref={containerRef}
+          className="flex flex-1 flex-col items-center justify-center bg-gray-100 p-4 relative select-none"
+        >
           <div className="absolute top-4 left-4 text-black bg-white/80 p-2 rounded shadow pointer-events-none">
             <div className="text-sm font-bold">Mode: {mode === 'sim' ? 'Simulation (Robot Move)' : 'Editor (Course Edit)'}</div>
           </div>
           <canvas
             ref={canvasRef}
-            width={800}
-            height={600}
-            className={`bg-white shadow-2xl border border-gray-300 rounded-lg ${mode === 'edit' ? 'cursor-default' : 'cursor-move'}`}
+            width={canvasSize.width}
+            height={canvasSize.height}
+            className={`bg-white shadow-xl border border-gray-300 rounded-lg ${mode === 'edit' ? 'cursor-default' : 'cursor-move'}`}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
@@ -500,7 +633,8 @@ function App() {
           {/* Sensor Console */}
           <div
             ref={statusRef}
-            className="mt-4 w-[800px] h-20 bg-gray-900 border border-gray-700 rounded-lg shadow-inner p-3 overflow-hidden text-gray-300"
+            style={{ width: canvasSize.width }}
+            className="mt-2 h-24 bg-gray-900 border border-gray-700 rounded-lg shadow-inner p-3 overflow-hidden text-gray-300 shrink-0"
           >
             Loading Sensors...
           </div>
