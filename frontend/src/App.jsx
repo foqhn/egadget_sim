@@ -86,7 +86,46 @@ function App() {
         // Wait for render
         setTimeout(drawScene, 50);
       };
+    } else if (courseName === 'sji') {
+      const img = new Image();
+      img.src = '/courses/sji.png';
+      // Preload to get dimensions
+      img.onload = () => {
+        let w = img.width;
+        let h = img.height;
+        // Scale fit to 800x600 if larger (keeping aspect ratio)
+        if (w > 800 || h > 600) {
+          const scale = Math.min(800 / w, 600 / h) * 0.95;
+          w *= scale;
+          h *= scale;
+        }
+        setCourseObjects([
+          { id: 'sji', type: 'image', x: (800 - w) / 2, y: (600 - h) / 2, w, h, imgElement: img }
+        ]);
+        // Wait for render
+        setTimeout(drawScene, 50);
+      };
+    } else if (courseName === 'src_classic') {
+      const img = new Image();
+      img.src = '/courses/src_classic.png';
+      // Preload to get dimensions
+      img.onload = () => {
+        let w = img.width;
+        let h = img.height;
+        // Scale fit to 800x600 if larger (keeping aspect ratio)
+        if (w > 1000 || h > 1000) {
+          const scale = Math.min(1000 / w, 1000 / h) * 0.95;
+          w *= scale;
+          h *= scale;
+        }
+        setCourseObjects([
+          { id: 'src_classic', type: 'image', x: (1000 - w) / 2, y: (1000 - h) / 2, w, h, imgElement: img }
+        ]);
+        // Wait for render
+        setTimeout(drawScene, 50);
+      };
     }
+
     setShowCourseMenu(false);
     // Ensure we switch to Sim mode or stay in current?
     // Maybe user wants to edit the loaded course, so keep current mode.
@@ -556,7 +595,19 @@ function App() {
                   className="px-4 py-2 text-left hover:bg-gray-700"
                   onClick={() => loadPredefinedCourse('hyoutan')}
                 >
-                  ひょうたんコース (Gourd)
+                  ひょうたんコース
+                </button>
+                <button
+                  className="px-4 py-2 text-left hover:bg-gray-700"
+                  onClick={() => loadPredefinedCourse('sji')}
+                >
+                  S字コース
+                </button>
+                <button
+                  className="px-4 py-2 text-left hover:bg-gray-700"
+                  onClick={() => loadPredefinedCourse('src_classic')}
+                >
+                  SRC　Classicコース
                 </button>
               </div>
             )}
