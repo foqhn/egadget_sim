@@ -153,7 +153,7 @@ export const transpileCode = (sourceCode) => {
 
         try {
             // Add 'gV' to the arguments
-            const generatorFactory = new Function('gAD', 'gV', 'motor', 'CN2', 'CN5', 'CN6', 'TRUE', generatorCode);
+            const generatorFactory = new Function('gAD', 'gV', 'motor', 'CN2', 'CN3', 'CN4', 'CN5', 'CN6', 'TRUE', generatorCode);
             return generatorFactory;
         } catch (syntaxError) {
             console.error("Syntax Error in Generated Code:", syntaxError);

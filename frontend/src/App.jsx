@@ -4,7 +4,7 @@ import { ROBOT_CONFIG, COURSE_CONFIG } from './config/robotConfig';
 import { transpileCode } from './utils/transpiler';
 import { updateRobotPhysics } from './utils/physics';
 import { drawCourse, drawRobot, drawSelection } from './utils/renderer';
-import { readSensorValue, calculateSensorPosition } from './utils/sensors';
+import { readSensorValue, calculateSensorPosition, isPointInObstacle } from './utils/sensors';
 import { getHandleHit, isObjectHit, resizeObject } from './utils/editorHelpers';
 
 function App() {
@@ -153,7 +153,7 @@ function App() {
   const [zoom, setZoom] = useState(1.0);
 
   // Helper to read sensors (extracted to be usable in drawScene too)
-  const updateSensors = (ctx) => {
+  const updateSensors = (ctx, objects) => {
     ROBOT_CONFIG.sensors.forEach(sensor => {
       const pos = calculateSensorPosition(robotRef.current, sensor);
       // Map World (pos) to Screen/Canvas Pixels for reading color
@@ -163,6 +163,14 @@ function App() {
       const val = readSensorValue(ctx, screenX, screenY);
       sharedGADRef.current[sensor.id] = val;
     });
+
+    if (ROBOT_CONFIG.touchSensors) {
+      ROBOT_CONFIG.touchSensors.forEach(sensor => {
+        const pos = calculateSensorPosition(robotRef.current, sensor);
+        const isHit = isPointInObstacle(pos.x, pos.y, objects);
+        sharedGADRef.current[sensor.id] = isHit ? 1023 : 0;
+      });
+    }
   };
 
   const updateStatus = () => {
@@ -171,15 +179,17 @@ function App() {
     const { leftSpeed, rightSpeed, x, y, angle } = robotRef.current;
 
     statusRef.current.innerHTML = `
-        <div class="grid grid-cols-4 gap-4 text-xs md:text-sm font-mono leading-tight">
-            <div><span class="text-gray-500">L_SENSOR(CN5):</span> <span class="text-green-400 font-bold">${gAD[5]}</span></div>
-            <div><span class="text-gray-500">C_SENSOR(CN2):</span> <span class="text-green-400 font-bold">${gAD[2]}</span></div>
-            <div><span class="text-gray-500">R_SENSOR(CN6):</span> <span class="text-green-400 font-bold">${gAD[6]}</span></div>
+        <div class="grid grid-cols-5 gap-2 text-xs font-mono leading-tight">
+            <div><span class="text-gray-500">L_SENS(CN5):</span> <span class="text-green-400 font-bold">${gAD[5]}</span></div>
+            <div><span class="text-gray-500">C_SENS(CN2):</span> <span class="text-green-400 font-bold">${gAD[2]}</span></div>
+            <div><span class="text-gray-500">R_SENS(CN6):</span> <span class="text-green-400 font-bold">${gAD[6]}</span></div>
             <div><span class="text-gray-500">ANGLE:</span> <span class="text-purple-400">${(angle * 180 / Math.PI).toFixed(1)}°</span></div>
-            
+            <div><span class="text-gray-500">POS:</span> <span class="text-purple-400">(${Math.round(x)}, ${Math.round(y)})</span></div>
+
+            <div><span class="text-gray-500">L_TOUCH(CN3):</span> <span class="${gAD[3] > 500 ? 'text-red-500' : 'text-green-400'} font-bold">${gAD[3] || 0}</span></div>
+            <div><span class="text-gray-500">R_TOUCH(CN4):</span> <span class="${gAD[4] > 500 ? 'text-red-500' : 'text-green-400'} font-bold">${gAD[4] || 0}</span></div>
             <div><span class="text-gray-500">L_MOTOR:</span> <span class="text-blue-400 font-bold">${Math.round(leftSpeed)}</span></div>
             <div><span class="text-gray-500">R_MOTOR:</span> <span class="text-blue-400 font-bold">${Math.round(rightSpeed)}</span></div>
-            <div class="col-span-2"><span class="text-gray-500">POS:</span> <span class="text-purple-400">(${Math.round(x)}, ${Math.round(y)})</span></div>
         </div>
       `;
   };
@@ -208,7 +218,7 @@ function App() {
     }
 
     // Check Sensors BEFORE drawing robot
-    updateSensors(ctx);
+    updateSensors(ctx, courseObjects);
 
     // Draw Robot (World Coords)
     drawRobot(ctx, robotRef.current);
@@ -240,10 +250,10 @@ function App() {
     drawCourse(ctx, canvas.width / zoom, canvas.height / zoom, courseObjects); // Helper needs World Size? Actually drawCourse just iterates objects. Width/Height arg is only for full-screen clearing which we did above.
 
     // 4. Physics Update (World Coords)
-    robotRef.current = updateRobotPhysics(robotRef.current);
+    robotRef.current = updateRobotPhysics(robotRef.current, courseObjects);
 
     // 2. Read Sensors (Use Screen Coords, BEFORE robot draw)
-    updateSensors(ctx);
+    updateSensors(ctx, courseObjects);
 
     // 5. Draw Robot
     drawRobot(ctx, robotRef.current);
@@ -345,7 +355,8 @@ function App() {
           setSelectedId(obj.id);
           dragRef.current = {
             isDragging: true, target: 'course_obj', targetId: obj.id,
-            startX: x, startY: y, initialObj: { ...obj } // store snapshot
+            startX: x, startY: y, initialObj: { ...obj }, // store snapshot
+            rotate: (e.shiftKey || e.button === 2)
           };
           drawScene();
           return;
@@ -378,13 +389,25 @@ function App() {
       drawScene();
     }
     else if (dragRef.current.target === 'course_obj') {
-      // Move object
+      // Move or Rotate object
       const newObjects = courseObjects.map(o => {
         if (o.id === selectedId) {
-          if (o.type === 'ellipse') {
-            return { ...o, cx: dragRef.current.initialObj.cx + dx, cy: dragRef.current.initialObj.cy + dy };
+          if (dragRef.current.rotate) {
+            const obj = dragRef.current.initialObj;
+            let cx, cy;
+            if (obj.type === 'ellipse') {
+              cx = obj.cx; cy = obj.cy;
+            } else {
+              cx = obj.x + obj.w / 2; cy = obj.y + obj.h / 2;
+            }
+            const angle = Math.atan2(y - cy, x - cx);
+            return { ...o, angle };
           } else {
-            return { ...o, x: dragRef.current.initialObj.x + dx, y: dragRef.current.initialObj.y + dy };
+            if (o.type === 'ellipse') {
+              return { ...o, cx: dragRef.current.initialObj.cx + dx, cy: dragRef.current.initialObj.cy + dy };
+            } else {
+              return { ...o, x: dragRef.current.initialObj.x + dx, y: dragRef.current.initialObj.y + dy };
+            }
           }
         }
         return o;
@@ -417,6 +440,16 @@ function App() {
     setSelectedId(id);
     setMode('edit');
     // Need wait for state update to redraw? useEffect or force redraw
+    setTimeout(drawScene, 0);
+  };
+
+  const addObstacle = () => {
+    const id = Date.now().toString();
+    setCourseObjects([...courseObjects, {
+      id, type: 'rect', x: 300, y: 200, w: 100, h: 50, color: '#ff4444', isObstacle: true, angle: 0
+    }]);
+    setSelectedId(id);
+    setMode('edit');
     setTimeout(drawScene, 0);
   };
 
@@ -491,7 +524,7 @@ function App() {
           sharedGADRef.current, // Pass the persistent gAD array
           sharedGVRef, // Pass gV array
           motorFunc,
-          2, 5, 6, true // Hardcoded CN constants and TRUE for now
+          2, 3, 4, 5, 6, true // CN2, CN3, CN4, CN5, CN6, TRUE
         );
 
         // Get the actual generator iterator
@@ -622,6 +655,7 @@ function App() {
               画像
               <input type="file" className="hidden" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" />
             </label>
+            <button onClick={addObstacle} className="px-3 py-1 bg-red-800 hover:bg-red-700 rounded font-bold">障害物</button>
             <button onClick={deleteSelected} className="px-3 py-1 bg-red-600 hover:bg-red-500 rounded">削除</button>
           </>}
 

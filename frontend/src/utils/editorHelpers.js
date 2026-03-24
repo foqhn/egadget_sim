@@ -26,19 +26,53 @@ export const getHandleHit = (obj, mx, my) => {
         { id: 'br', x: bounds.x + bounds.w, y: bounds.y + bounds.h }
     ];
 
+    let testX = mx;
+    let testY = my;
+    if (obj.angle) {
+        let cx, cy;
+        if (obj.type === 'ellipse') {
+            cx = obj.cx; cy = obj.cy;
+        } else {
+            cx = obj.x + obj.w / 2; cy = obj.y + obj.h / 2;
+        }
+        const dx = mx - cx;
+        const dy = my - cy;
+        const cos = Math.cos(-obj.angle);
+        const sin = Math.sin(-obj.angle);
+        testX = cx + dx * cos - dy * sin;
+        testY = cy + dx * sin + dy * cos;
+    }
+
     const HANDLE_SIZE = 10;
     for (let h of handles) {
-        if (Math.abs(mx - h.x) < HANDLE_SIZE && Math.abs(my - h.y) < HANDLE_SIZE) {
+        if (Math.abs(testX - h.x) < HANDLE_SIZE && Math.abs(testY - h.y) < HANDLE_SIZE) {
             return h.id;
         }
     }
     return null;
 };
 
-// Check if point is inside object (Simple BBox check for now, can be improved)
 export const isObjectHit = (obj, mx, my) => {
     const b = getBounds(obj);
-    return (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h);
+    let testX = mx;
+    let testY = my;
+
+    if (obj.angle) {
+        let cx, cy;
+        if (obj.type === 'ellipse') {
+            cx = obj.cx; cy = obj.cy;
+        } else {
+            cx = obj.x + obj.w / 2; cy = obj.y + obj.h / 2;
+        }
+        const dx = mx - cx;
+        const dy = my - cy;
+        const cos = Math.cos(-obj.angle);
+        const sin = Math.sin(-obj.angle);
+        testX = cx + dx * cos - dy * sin;
+        testY = cy + dx * sin + dy * cos;
+    }
+
+    return (testX >= b.x && testX <= b.x + b.w && testY >= b.y && testY <= b.y + b.h);
 };
 
 export const resizeObject = (obj, handle, dx, dy) => {

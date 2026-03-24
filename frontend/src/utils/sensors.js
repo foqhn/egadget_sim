@@ -49,3 +49,42 @@ export const calculateSensorPosition = (robot, sensorConfig) => {
         y: robot.y + Math.sin(theta) * sensorConfig.distance
     };
 };
+
+// Checks if a World coordinate point is inside any obstacle.
+export const isPointInObstacle = (x, y, objects) => {
+    if (!objects) return false;
+    for (const obj of objects) {
+        if (obj.isObstacle) {
+            let px = x;
+            let py = y;
+            if (obj.angle) {
+                let cx, cy;
+                if (obj.type === 'ellipse') {
+                    cx = obj.cx; cy = obj.cy;
+                } else {
+                    cx = obj.x + obj.w / 2; cy = obj.y + obj.h / 2;
+                }
+                const dx = px - cx;
+                const dy = py - cy;
+                const cos = Math.cos(-obj.angle);
+                const sin = Math.sin(-obj.angle);
+                px = cx + dx * cos - dy * sin;
+                py = cy + dx * sin + dy * cos;
+            }
+
+            // Simplified geometric check
+            if (obj.type === 'rect') {
+                if (px >= obj.x && px <= obj.x + obj.w && py >= obj.y && py <= obj.y + obj.h) {
+                    return true;
+                }
+            } else if (obj.type === 'ellipse') {
+                const dx = px - obj.cx;
+                const dy = py - obj.cy;
+                if ((dx * dx) / (obj.rx * obj.rx) + (dy * dy) / (obj.ry * obj.ry) <= 1) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+};

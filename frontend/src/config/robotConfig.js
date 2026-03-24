@@ -24,6 +24,11 @@ export const ROBOT_CONFIG = {
         { id: 2, label: 'Center', angle: 0, distance: 10, color: 'red' },
         { id: 5, label: 'Left', angle: degreesToRadians(-60), distance: 15, color: 'blue' },
         { id: 6, label: 'Right', angle: degreesToRadians(60), distance: 15, color: 'green' }
+    ],
+    // Touch Sensors (Geometric Collision)
+    touchSensors: [
+        { id: 3, label: 'FrontLeft(CN3)', angle: degreesToRadians(-35), distance: 22, color: 'orange', width: 4, height: 15 },
+        { id: 4, label: 'FrontRight(CN4)', angle: degreesToRadians(35), distance: 22, color: 'orange', width: 4, height: 15 }
     ]
 };
 
