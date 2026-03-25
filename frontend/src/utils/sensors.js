@@ -88,3 +88,52 @@ export const isPointInObstacle = (x, y, objects) => {
     }
     return false;
 };
+
+/**
+ * Calculates IR intensity from all IR sources for a given sensor position and robot angle.
+ */
+export const calculateIrIntensity = (x, y, robotAngle, objects) => {
+    let maxIntensity = 0;
+    if (!objects) return 0;
+
+    for (const obj of objects) {
+        if (obj.isIrLight) {
+            let cx, cy;
+            if (obj.type === 'ellipse') {
+                cx = obj.cx; cy = obj.cy;
+            } else {
+                cx = obj.x + obj.w / 2; cy = obj.y + obj.h / 2;
+            }
+
+            const dx = cx - x;
+            const dy = cy - y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            // Angle from sensor to light source
+            const angleToTarget = Math.atan2(dy, dx);
+
+            // Difference from robot's forward vector
+            let angleDiff = angleToTarget - robotAngle;
+            // Normalize exactly between -PI and PI
+            while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+            while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+            // Is the source in front of the robot? (|angleDiff| < PI/2)
+            if (Math.abs(angleDiff) < Math.PI / 2) {
+                const angularFactor = Math.cos(angleDiff); // 1.0 straight ahead, 0.0 at 90 deg
+
+                // Distance attenuation (Example: max 1023, drops to 0 at 600 pixels)
+                // The eGadget typically operates on a field. 600px gives a good range.
+                const MAX_DIST = 600;
+                let distanceFactor = 1.0 - (distance / MAX_DIST);
+                if (distanceFactor < 0) distanceFactor = 0;
+
+                const intensity = Math.floor(1023 * distanceFactor * angularFactor);
+                if (intensity > maxIntensity) {
+                    maxIntensity = intensity;
+                }
+            }
+        }
+    }
+    return maxIntensity;
+};

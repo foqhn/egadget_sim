@@ -86,8 +86,8 @@ export const transpileCode = (sourceCode) => {
             let b = body.replace(/\bconst\s+(?:unsigned\s+)?(?:int|float|double|long|short|char|bool)\b/g, "const");
             b = b.replace(/\b(?:unsigned\s+)?(?:int|float|double|long|short|char|bool)\b/g, "let");
 
-            // 3. Transform 'while(TRUE)' -> 'while(true)' with yield
-            b = b.replace(/while\s*\(\s*TRUE\s*\)\s*\{/g, "while(true) { yield ({type: 'tick'});");
+            // 3. Transform 'while(TRUE)' or 'while(1)' -> 'while(true)' with yield
+            b = b.replace(/while\s*\(\s*(TRUE|true|1)\s*\)\s*\{/g, "while(true) { yield ({type: 'tick'});");
 
             // 4. Transform 'wait_ms(X)' -> 'yield {type: 'wait', ms: X};'
             b = b.replace(/wait_ms\(([^)]+)\);/g, "yield ({type: 'wait', ms: $1});");

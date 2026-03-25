@@ -29,6 +29,10 @@ export const ROBOT_CONFIG = {
     touchSensors: [
         { id: 3, label: 'FrontLeft(CN3)', angle: degreesToRadians(-35), distance: 22, color: 'orange', width: 4, height: 15 },
         { id: 4, label: 'FrontRight(CN4)', angle: degreesToRadians(35), distance: 22, color: 'orange', width: 4, height: 15 }
+    ],
+    // IR Sensors
+    irSensors: [
+        { id: 1, label: 'IR(CN1)', angle: 0, distance: 10, color: 'magenta' } // Same pos as CN2
     ]
 };
 

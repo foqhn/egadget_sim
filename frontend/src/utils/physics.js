@@ -18,7 +18,10 @@ export const updateRobotPhysics = (robot, objects) => {
     let nextY = y + v * Math.sin(angle);
     let nextAngle = angle + omega;
 
-    // Collision check points (4 corners + touch sensors)
+    // Collision check points (4 corners of the robot body)
+    // We DO NOT include touch sensors here. Touch sensors are designed to "compress" (penetrate slightly)
+    // to detect collision. If we block physically using the sensor points, they will never enter the 
+    // obstacle and thus never trigger the software sensor check.
     const w2 = body.width / 2;
     const h2 = body.height / 2;
     const points = [
@@ -27,15 +30,6 @@ export const updateRobotPhysics = (robot, objects) => {
         { dx: -w2, dy: h2 },
         { dx: -w2, dy: -h2 }
     ];
-
-    if (touchSensors) {
-        touchSensors.forEach(ts => {
-            points.push({
-                dx: ts.distance * Math.cos(ts.angle),
-                dy: ts.distance * Math.sin(ts.angle)
-            });
-        });
-    }
 
     const checkCollision = (cx, cy, cAngle) => {
         if (!objects) return false;

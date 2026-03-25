@@ -1,12 +1,13 @@
 // Helper to get bounding box of an object for handle calculation
 export const getBounds = (obj) => {
     if (obj.type === 'ellipse') {
+        const sw = obj.strokeWidth || 0;
         // rx, ry are radii
         return {
-            x: obj.cx - obj.rx - obj.strokeWidth / 2,
-            y: obj.cy - obj.ry - obj.strokeWidth / 2,
-            w: (obj.rx * 2) + obj.strokeWidth,
-            h: (obj.ry * 2) + obj.strokeWidth
+            x: obj.cx - obj.rx - sw / 2,
+            y: obj.cy - obj.ry - sw / 2,
+            w: (obj.rx * 2) + sw,
+            h: (obj.ry * 2) + sw
         };
     } else if (obj.type === 'rect' || obj.type === 'image') {
         return {

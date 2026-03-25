@@ -4,7 +4,7 @@ import { ROBOT_CONFIG, COURSE_CONFIG } from './config/robotConfig';
 import { transpileCode } from './utils/transpiler';
 import { updateRobotPhysics } from './utils/physics';
 import { drawCourse, drawRobot, drawSelection } from './utils/renderer';
-import { readSensorValue, calculateSensorPosition, isPointInObstacle } from './utils/sensors';
+import { readSensorValue, calculateSensorPosition, isPointInObstacle, calculateIrIntensity } from './utils/sensors';
 import { getHandleHit, isObjectHit, resizeObject } from './utils/editorHelpers';
 
 function App() {
@@ -171,6 +171,15 @@ function App() {
         sharedGADRef.current[sensor.id] = isHit ? 1023 : 0;
       });
     }
+
+    if (ROBOT_CONFIG.irSensors) {
+      ROBOT_CONFIG.irSensors.forEach(sensor => {
+        const pos = calculateSensorPosition(robotRef.current, sensor);
+        // Intensity is based on sensor's world pos, robot's heading, and all IR lights
+        const intensity = calculateIrIntensity(pos.x, pos.y, robotRef.current.angle, objects);
+        sharedGADRef.current[sensor.id] = intensity;
+      });
+    }
   };
 
   const updateStatus = () => {
@@ -189,16 +198,17 @@ function App() {
 
     statusRef.current.innerHTML = `
         <div class="grid grid-cols-5 gap-2 text-xs font-mono leading-tight">
-            <div><span class="text-gray-500">L_SENS(CN5):</span> <span class="text-green-400 font-bold">${gAD[5]}</span></div>
-            <div><span class="text-gray-500">C_SENS(CN2):</span> <span class="text-green-400 font-bold">${gAD[2]}</span></div>
-            <div><span class="text-gray-500">R_SENS(CN6):</span> <span class="text-green-400 font-bold">${gAD[6]}</span></div>
-            <div><span class="text-gray-500">ANGLE:</span> <span class="text-purple-400">${(angle * 180 / Math.PI).toFixed(1)}°</span></div>
-            <div><span class="text-gray-500">POS:</span> <span class="text-purple-400">(${Math.round(x)}, ${Math.round(y)})</span></div>
-
-            <div><span class="text-gray-500">L_TOUCH(CN3):</span> <span class="${gAD[3] > 500 ? 'text-red-500' : 'text-green-400'} font-bold">${gAD[3] || 0}</span></div>
-            <div><span class="text-gray-500">R_TOUCH(CN4):</span> <span class="${gAD[4] > 500 ? 'text-red-500' : 'text-green-400'} font-bold">${gAD[4] || 0}</span></div>
-            <div><span class="text-gray-500">L_MOTOR:</span> <span class="text-blue-400 font-bold">${Math.round(leftSpeed)}</span></div>
-            <div><span class="text-gray-500">R_MOTOR:</span> <span class="text-blue-400 font-bold">${Math.round(rightSpeed)}</span></div>
+          <div><span class="text-gray-500">IR(CN1):</span> <span class="text-pink-400 font-bold">${gAD[1] || 0}</span></div>
+          <div><span class="text-gray-500">C_SENS(CN2):</span> <span class="text-green-400 font-bold">${gAD[2]}</span></div>
+          <div><span class="text-gray-500">L_TOUCH(CN3):</span> <span class="${gAD[3] > 500 ? 'text-red-500' : 'text-green-400'} font-bold">${gAD[3] || 0}</span></div>
+          <div><span class="text-gray-500">R_TOUCH(CN4):</span> <span class="${gAD[4] > 500 ? 'text-red-500' : 'text-green-400'} font-bold">${gAD[4] || 0}</span></div>
+          <div><span class="text-gray-500">L_SENS(CN5):</span> <span class="text-green-400 font-bold">${gAD[5]}</span></div>
+          <div><span class="text-gray-500">R_SENS(CN6):</span> <span class="text-green-400 font-bold">${gAD[6]}</span></div>
+          <div><span class="text-gray-500">ANGLE:</span> <span class="text-purple-400">${(angle * 180 / Math.PI).toFixed(1)}°</span></div>
+          <div><span class="text-gray-500">POS:</span> <span class="text-purple-400">(${Math.round(x)}, ${Math.round(y)})</span></div>    
+          <div><span class="text-gray-500">L_MOTOR:</span> <span class="text-blue-400 font-bold">${Math.round(leftSpeed)}</span></div>
+          <div><span class="text-gray-500">R_MOTOR:</span> <span class="text-blue-400 font-bold">${Math.round(rightSpeed)}</span></div>
+            
         </div>
       `;
   };
@@ -464,6 +474,15 @@ function App() {
     setMode('edit');
   };
 
+  const addIrLight = () => {
+    const id = Date.now().toString();
+    setCourseObjects([...courseObjects, {
+      id, type: 'ellipse', cx: 200, cy: 300, rx: 30, ry: 30, color: 'magenta', isIrLight: true
+    }]);
+    setSelectedId(id);
+    setMode('edit');
+  };
+
   const deleteSelected = () => {
     if (selectedId) {
       setCourseObjects(courseObjects.filter(o => o.id !== selectedId));
@@ -668,6 +687,7 @@ function App() {
               <input type="file" className="hidden" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" />
             </label>
             <button onClick={addObstacle} className="px-3 py-1 bg-red-800 hover:bg-red-700 rounded font-bold">障害物</button>
+            <button onClick={addIrLight} className="px-3 py-1 bg-pink-700 hover:bg-pink-600 rounded font-bold">IR発信源</button>
             <button onClick={deleteSelected} className="px-3 py-1 bg-red-600 hover:bg-red-500 rounded">削除</button>
           </>}
 
