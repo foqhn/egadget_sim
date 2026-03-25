@@ -91,8 +91,6 @@ function App() {
         setCourseObjects([
           { id: 'hyoutan', type: 'image', x: (800 - w) / 2, y: (600 - h) / 2, w, h, imgElement: img }
         ]);
-        // Wait for render
-        setTimeout(drawScene, 50);
       };
     } else if (courseName === 'sji') {
       const img = new Image();
@@ -110,8 +108,6 @@ function App() {
         setCourseObjects([
           { id: 'sji', type: 'image', x: (800 - w) / 2, y: (600 - h) / 2, w, h, imgElement: img }
         ]);
-        // Wait for render
-        setTimeout(drawScene, 50);
       };
     } else if (courseName === 'src_classic') {
       const img = new Image();
@@ -129,15 +125,11 @@ function App() {
         setCourseObjects([
           { id: 'src_classic', type: 'image', x: (1000 - w) / 2, y: (1000 - h) / 2, w, h, imgElement: img }
         ]);
-        // Wait for render
-        setTimeout(drawScene, 50);
       };
     }
 
     setShowCourseMenu(false);
-    // Ensure we switch to Sim mode or stay in current?
-    // Maybe user wants to edit the loaded course, so keep current mode.
-    setTimeout(drawScene, 0);
+    // State changes will trigger useEffect
   };
 
   // Image Upload Ref
@@ -375,14 +367,12 @@ function App() {
             startX: x, startY: y, initialObj: { ...obj }, // store snapshot
             rotate: (e.shiftKey || e.button === 2)
           };
-          drawScene();
           return;
         }
       }
 
       // Clicked empty space
       setSelectedId(null);
-      drawScene();
     }
   };
 
@@ -403,7 +393,7 @@ function App() {
         dragRef.current.startX = x; dragRef.current.startY = y;
       }
       startPositionRef.current = { ...robotRef.current };
-      drawScene();
+      requestAnimationFrame(drawScene); // Robot is unmanaged state (ref), manually request draw
     }
     else if (dragRef.current.target === 'course_obj') {
       // Move or Rotate object
@@ -430,7 +420,6 @@ function App() {
         return o;
       });
       setCourseObjects(newObjects);
-      drawScene();
     }
     else if (dragRef.current.target === 'course_handle') {
       // Resize object
@@ -438,7 +427,6 @@ function App() {
       const resized = resizeObject(obj, dragRef.current.handleId, dx, dy);
 
       setCourseObjects(courseObjects.map(o => o.id === selectedId ? resized : o));
-      drawScene();
     }
   };
 
@@ -456,8 +444,6 @@ function App() {
     }]);
     setSelectedId(id);
     setMode('edit');
-    // Need wait for state update to redraw? useEffect or force redraw
-    setTimeout(drawScene, 0);
   };
 
   const addObstacle = () => {
@@ -467,7 +453,6 @@ function App() {
     }]);
     setSelectedId(id);
     setMode('edit');
-    setTimeout(drawScene, 0);
   };
 
   const addEllipse = () => {
@@ -477,14 +462,12 @@ function App() {
     }]);
     setSelectedId(id);
     setMode('edit');
-    setTimeout(drawScene, 0);
   };
 
   const deleteSelected = () => {
     if (selectedId) {
       setCourseObjects(courseObjects.filter(o => o.id !== selectedId));
       setSelectedId(null);
-      setTimeout(drawScene, 0);
     }
   };
 
@@ -508,7 +491,6 @@ function App() {
         }]);
         setSelectedId(id);
         setMode('edit');
-        setTimeout(drawScene, 0);
       };
       img.src = evt.target.result;
     };
@@ -596,8 +578,8 @@ function App() {
       rightSpeed: 0
     };
     waitStateRef.current = { isWaiting: false, endTime: 0 };
-    // Force draw
-    setTimeout(drawScene, 0);
+    // Force draw via rAF
+    requestAnimationFrame(drawScene);
   };
 
   // Canvas Autosize Logic
