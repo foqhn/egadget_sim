@@ -53,6 +53,14 @@ function App() {
   const waitStateRef = useRef({ isWaiting: false, endTime: 0 }); // Stores wait status
   const requestRef = useRef(null);
   const sharedGADRef = useRef(new Array(10).fill(0)); // Persistent gAD array for sensor values
+  const sharedLcdRef = useRef(['', '']);
+  const lcdLine1Ref = useRef(null);
+  const lcdLine2Ref = useRef(null);
+  const sharedLedRef = useRef([0, 0, 0, 0]); // index 0=green, 1=red1, 2=red2, 3=red3
+  const led0Ref = useRef(null);
+  const led1Ref = useRef(null);
+  const led2Ref = useRef(null);
+  const led3Ref = useRef(null);
 
   // --- Course Editor State ---
   const [courseObjects, setCourseObjects] = useState([
@@ -174,6 +182,15 @@ function App() {
   };
 
   const updateStatus = () => {
+    if (lcdLine1Ref.current) lcdLine1Ref.current.innerText = (sharedLcdRef.current[0] || '').toString().padEnd(16, ' ').substring(0, 16);
+    if (lcdLine2Ref.current) lcdLine2Ref.current.innerText = (sharedLcdRef.current[1] || '').toString().padEnd(16, ' ').substring(0, 16);
+
+    const leds = sharedLedRef.current;
+    if (led0Ref.current) led0Ref.current.className = `w-4 h-4 rounded-full border border-black shadow-inner ${leds[0] ? 'bg-green-400 shadow-[0_0_10px_2px_rgba(74,222,128,0.8)]' : 'bg-green-900'}`;
+    if (led1Ref.current) led1Ref.current.className = `w-4 h-4 rounded-full border border-black shadow-inner ${leds[1] ? 'bg-red-500 shadow-[0_0_10px_2px_rgba(239,68,68,0.8)]' : 'bg-red-950'}`;
+    if (led2Ref.current) led2Ref.current.className = `w-4 h-4 rounded-full border border-black shadow-inner ${leds[2] ? 'bg-red-500 shadow-[0_0_10px_2px_rgba(239,68,68,0.8)]' : 'bg-red-950'}`;
+    if (led3Ref.current) led3Ref.current.className = `w-4 h-4 rounded-full border border-black shadow-inner ${leds[3] ? 'bg-red-500 shadow-[0_0_10px_2px_rgba(239,68,68,0.8)]' : 'bg-red-950'}`;
+
     if (!statusRef.current) return;
     const gAD = sharedGADRef.current;
     const { leftSpeed, rightSpeed, x, y, angle } = robotRef.current;
@@ -511,6 +528,8 @@ function App() {
         waitStateRef.current = { isWaiting: false, endTime: 0 };
         sharedGADRef.current = new Array(10).fill(0); // Reset shared GAD
         const sharedGVRef = new Array(10).fill(0); // gV array for user variables
+        sharedLcdRef.current = ['', '']; // Reset LCD display
+        sharedLedRef.current = [0, 0, 0, 0]; // Reset LEDs
 
         // Define the motor function for the generator
         const motorFunc = (l, r) => {
@@ -518,13 +537,24 @@ function App() {
           robotRef.current.rightSpeed = l; // Swap: 2nd Arg (r) -> Left Motor
         };
 
+        // Define LCD functions
+        const lcd_putX = (line, text) => { sharedLcdRef.current[line - 1] = text || ''; };
+        const lcd_puts_var2 = (line, v1, v2) => { sharedLcdRef.current[line - 1] = `${sharedGVRef[v1] ?? 0} ${sharedGVRef[v2] ?? 0}`; };
+        const lcd_puts_var3 = (line, v1, v2, v3) => { sharedLcdRef.current[line - 1] = `${sharedGVRef[v1] ?? 0} ${sharedGVRef[v2] ?? 0} ${sharedGVRef[v3] ?? 0}`; };
+        const lcd_puts_var4 = (line, v1, v2, v3, v4) => { sharedLcdRef.current[line - 1] = `${sharedGVRef[v1] ?? 0} ${sharedGVRef[v2] ?? 0} ${sharedGVRef[v3] ?? 0} ${sharedGVRef[v4] ?? 0}`; };
+        const lcd_puts_sensor = (line, c1, c2, c3, c4) => { sharedLcdRef.current[line - 1] = `${sharedGADRef.current[c1] ?? 0} ${sharedGADRef.current[c2] ?? 0} ${sharedGADRef.current[c3] ?? 0} ${sharedGADRef.current[c4] ?? 0}`; };
+
+        // Define LED function
+        const set_Led = (index, state) => { sharedLedRef.current[index] = state; };
+
         // Create the generator function by invoking the factory with dependencies
         // The factory returns a function that, when called, returns the generator iterator.
         const getGeneratorIterator = factory(
           sharedGADRef.current, // Pass the persistent gAD array
           sharedGVRef, // Pass gV array
           motorFunc,
-          2, 3, 4, 5, 6, true // CN2, CN3, CN4, CN5, CN6, TRUE
+          lcd_putX, lcd_puts_var2, lcd_puts_var3, lcd_puts_var4, lcd_puts_sensor, set_Led,
+          1, 2, 3, 4, 5, 6, true
         );
 
         // Get the actual generator iterator
@@ -715,8 +745,37 @@ function App() {
           ref={containerRef}
           className="flex flex-1 flex-col items-center justify-center bg-gray-100 p-4 relative select-none"
         >
-          <div className="absolute top-4 left-4 text-black bg-white/80 p-2 rounded shadow pointer-events-none">
+          <div className="absolute top-4 left-4 text-black bg-white/80 p-2 rounded shadow pointer-events-none z-10">
             <div className="text-sm font-bold">Mode: {mode === 'sim' ? 'Simulation (Robot Move)' : 'Editor (Course Edit)'}</div>
+          </div>
+
+          {/* Device UI Container (LCD + LEDs) */}
+          <div className="absolute top-4 right-4 flex flex-col items-center gap-3 z-10 pointer-events-none">
+            {/* LCD UI Component */}
+            <div className="bg-[#a3c94a] border-[8px] border-gray-900 px-2 py-1 rounded shadow-xl font-mono text-black w-64 text-xl font-bold tracking-widest" style={{ textShadow: "1px 1px 0px rgba(0,0,0,0.1)" }}>
+              <div ref={lcdLine1Ref} className="border-b-[3px] border-black/10 pb-0.5 min-h-[1.75rem] whitespace-pre overflow-hidden"></div>
+              <div ref={lcdLine2Ref} className="pt-0.5 min-h-[1.75rem] whitespace-pre overflow-hidden"></div>
+            </div>
+
+            {/* LED Display */}
+            <div className="bg-gray-800 border-[4px] border-gray-900 p-2 px-6 rounded shadow-xl flex gap-6">
+              <div className="flex flex-col items-center gap-1">
+                <div ref={led0Ref} className="w-4 h-4 rounded-full bg-green-900 border border-black shadow-inner"></div>
+                <span className="text-[10px] text-gray-400 font-bold leading-none">0(G)</span>
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <div ref={led1Ref} className="w-4 h-4 rounded-full bg-red-950 border border-black shadow-inner"></div>
+                <span className="text-[10px] text-gray-400 font-bold leading-none">1(R)</span>
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <div ref={led2Ref} className="w-4 h-4 rounded-full bg-red-950 border border-black shadow-inner"></div>
+                <span className="text-[10px] text-gray-400 font-bold leading-none">2(R)</span>
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <div ref={led3Ref} className="w-4 h-4 rounded-full bg-red-950 border border-black shadow-inner"></div>
+                <span className="text-[10px] text-gray-400 font-bold leading-none">3(R)</span>
+              </div>
+            </div>
           </div>
           <canvas
             ref={canvasRef}

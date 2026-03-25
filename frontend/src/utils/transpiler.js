@@ -11,6 +11,8 @@ export const transpileCode = (sourceCode) => {
 
         // 1. Remove C-style casts
         cleanCode = cleanCode.replace(/\((?!TRUE\))[A-Z]+\)/g, "");
+        // 1.5 Remove (ROMC *) cast for LCD strings
+        cleanCode = cleanCode.replace(/\(ROMC\s*\*\s*\)/g, "");
 
         // Helper to extract all functions
         const extractFunctions = (code) => {
@@ -110,7 +112,6 @@ export const transpileCode = (sourceCode) => {
             }).join(', ');
         };
 
-        // Construct Generator Factory Code
         const gV_Constants = `
         const VAR_A = 0;
         const VAR_B = 1;
@@ -122,6 +123,8 @@ export const transpileCode = (sourceCode) => {
         const VAR_H = 7;
         const VAR_I = 8;
         const VAR_J = 9;
+        const LED_OFF = 0;
+        const LED_ON = 1;
         `;
 
         let subroutinesCode = '';
@@ -153,7 +156,7 @@ export const transpileCode = (sourceCode) => {
 
         try {
             // Add 'gV' to the arguments
-            const generatorFactory = new Function('gAD', 'gV', 'motor', 'CN2', 'CN3', 'CN4', 'CN5', 'CN6', 'TRUE', generatorCode);
+            const generatorFactory = new Function('gAD', 'gV', 'motor', 'lcd_putX', 'lcd_puts_var2', 'lcd_puts_var3', 'lcd_puts_var4', 'lcd_puts_sensor', 'set_Led', 'CN1', 'CN2', 'CN3', 'CN4', 'CN5', 'CN6', 'TRUE', generatorCode);
             return generatorFactory;
         } catch (syntaxError) {
             console.error("Syntax Error in Generated Code:", syntaxError);
