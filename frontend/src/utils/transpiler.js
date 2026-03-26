@@ -9,6 +9,14 @@ export const transpileCode = (sourceCode) => {
         // 0. Remove Comments
         let cleanCode = sourceCode.replace(/\/\/.*$/gm, '').replace(/\/\*[\sS]*?\*\//g, '');
 
+        // 0.5 Handle Preprocessors (#include, #define)
+        cleanCode = cleanCode.replace(/#(include|pragma).*$/gm, '');
+        let definesCode = '';
+        cleanCode = cleanCode.replace(/#define\s+(\w+)\s+(.+)$/gm, (match, name, value) => {
+            definesCode += `const ${name} = ${value};\n`;
+            return '';
+        });
+
         // 1. Remove C-style casts
         cleanCode = cleanCode.replace(/\((?!TRUE\))[A-Z]+\)/g, "");
         // 1.5 Remove (ROMC *) cast for LCD strings
@@ -86,8 +94,14 @@ export const transpileCode = (sourceCode) => {
             let b = body.replace(/\bconst\s+(?:unsigned\s+)?(?:int|float|double|long|short|char|bool)\b/g, "const");
             b = b.replace(/\b(?:unsigned\s+)?(?:int|float|double|long|short|char|bool)\b/g, "let");
 
-            // 3. Transform 'while(TRUE)' or 'while(1)' -> 'while(true)' with yield
-            b = b.replace(/while\s*\(\s*(TRUE|true|1)\s*\)\s*\{/g, "while(true) { yield ({type: 'tick'});");
+            // Map TRUE / FALSE
+            b = b.replace(/\bTRUE\b/g, "true");
+            b = b.replace(/\bFALSE\b/g, "false");
+
+            // 3. Transform all loops to yield ({type: 'tick'}) to prevent blocking
+            b = b.replace(/while\s*\(([\s\S]*?)\)\s*\{/g, "while($1) { yield ({type: 'tick'});");
+            b = b.replace(/for\s*\(([\s\S]*?)\)\s*\{/g, "for($1) { yield ({type: 'tick'});");
+            b = b.replace(/do\s*\{/g, "do { yield ({type: 'tick'});");
 
             // 4. Transform 'wait_ms(X)' -> 'yield {type: 'wait', ms: X};'
             b = b.replace(/wait_ms\(([^)]+)\);/g, "yield ({type: 'wait', ms: $1});");
@@ -113,6 +127,7 @@ export const transpileCode = (sourceCode) => {
         };
 
         const gV_Constants = `
+        const FALSE = false;
         const VAR_A = 0;
         const VAR_B = 1;
         const VAR_C = 2;
@@ -146,6 +161,7 @@ export const transpileCode = (sourceCode) => {
 
         const generatorCode = `
         ${gV_Constants}
+        ${definesCode}
         ${subroutinesCode}
         return function* () {
           ${mainBody}

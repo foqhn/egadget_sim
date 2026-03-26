@@ -9,7 +9,7 @@ export const ROBOT_CONFIG = {
     wheels: {
         base: 40, // Distance between wheels (pixels)
         width: 5,
-        length: 30, // Visual length
+        length: 24, // Visual length
         color: '#1f2937', // gray-800
     },
     // Physics Limits
@@ -27,8 +27,8 @@ export const ROBOT_CONFIG = {
     ],
     // Touch Sensors (Geometric Collision)
     touchSensors: [
-        { id: 3, label: 'FrontLeft(CN3)', angle: degreesToRadians(-35), distance: 22, color: 'orange', width: 4, height: 15 },
-        { id: 4, label: 'FrontRight(CN4)', angle: degreesToRadians(35), distance: 22, color: 'orange', width: 4, height: 15 }
+        { id: 3, label: 'FrontLeft(CN3)', angle: degreesToRadians(-40), distance: 25, color: 'orange', width: 4, height: 20 },
+        { id: 4, label: 'FrontRight(CN4)', angle: degreesToRadians(40), distance: 25, color: 'orange', width: 4, height: 20 }
     ],
     // IR Sensors
     irSensors: [
